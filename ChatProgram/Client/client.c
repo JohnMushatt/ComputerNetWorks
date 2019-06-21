@@ -13,7 +13,7 @@ int validUsername(char *username) {
 	if (strlen(username) <= 20) {
 		return EXIT_SUCCESS;
 	} else {
-		EXIT_FAILURE;
+		return EXIT_FAILURE;
 	}
 }
 char* fixInput(char *input) {
