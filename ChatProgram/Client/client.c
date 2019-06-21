@@ -6,16 +6,32 @@
  */
 
 // Client side C/C++ program to demonstrate Socket programming
-
 #define PORT 8080
 #include "client.h"
+
+int validUsername(char *username) {
+	if (strlen(username) <= 20) {
+		return EXIT_SUCCESS;
+	} else {
+		EXIT_FAILURE;
+	}
+}
 char* fixInput(char *input) {
 	int len = strlen(input);
 	char *newString = malloc(sizeof(char) * (len));
-	strncpy(newString, input, len - 2);
+	strncpy(newString, input, len - 1);
+	return newString;
 
 }
-char *connectionMessage(char *username) {
+char* connectionMessage(char *username) {
+	char *newString;
+	char *message_type = "USER_CONNECT:";
+	int len = strlen(username) + strlen(message_type) + 1;
+	newString = malloc(sizeof(char) * (len));
+	strcat(newString, message_type);
+	strcat(newString, username);
+	*(newString + len) = '\0';
+	return newString;
 
 }
 int main(int argc, char const *argv[]) {
@@ -48,12 +64,17 @@ int main(int argc, char const *argv[]) {
 		char *username = malloc(sizeof(char) * 20);
 		fgets(username, 20, stdin);
 		username = fixInput(username);
+		while (validUsername(username) == EXIT_FAILURE) {
+			printf("%s is not a valid username.\n", username);
+			printf("Please enter a valid username (Limited to 20 characters:");
+			fgets(username, 20, stdin);
+		}
 		printf("Your username: %s!\n", username);
-		char *message = "USER:"
-		send(sock, hello, strlen(hello), 0);
-		printf("Hello message sent\n");
+		char *message = connectionMessage(username);
+		send(sock, message, strlen(message), 0);
+		printf("Attempting to log in!\n");
 		valread = read(sock, buffer, 1024);
-		printf("%s\n", buffer);
+		printf("Server Response:\n%s\n", buffer);
 	}
 
 	return 0;

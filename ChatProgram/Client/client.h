@@ -20,3 +20,4 @@
 
 char *fixInput(char *input);
 
+int validUsername(char *username);
