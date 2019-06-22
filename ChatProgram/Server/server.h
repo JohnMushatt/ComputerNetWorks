@@ -21,4 +21,8 @@
 
 
 char *getMessageType(const char *buffer);
+
+char *getMessage(const char *buffer);
+
+char* getUsername(const char *buffer);
 #endif /* SERVER_SERVER_H_ */

@@ -7,8 +7,6 @@
 
 // Server side C program to demonstrate Socket programming
 #include "server.h"
-#include "hashmap.h"
-
 char* getMessageType(const char *buffer) {
 	char *type;
 	char *c = strchr(buffer, ':');
@@ -26,8 +24,17 @@ char* getUsername(const char *buffer) {
 	strcat(name, (strchr(buffer, ':') + 1));
 	return name;
 }
+char* getMessage(const char *buffer) {
+	char *message;
+	char *c = strchr(buffer, ':');
+	int index = (int) (c - buffer);
+	message = malloc(sizeof(char) * (index));
+	//strncat(name, buffer, index);
+	strcat(message, (strchr(buffer, ':') + 1));
+	return message;
+}
 int main(int argc, char const *argv[]) {
-
+	struct Node *chat_log = NULL;
 	hashtable_t *connected_users = ht_create(MAX_USERS);
 	int server_fd, new_socket;
 	long valread;
@@ -89,13 +96,12 @@ int main(int argc, char const *argv[]) {
 				printf("Username: %s is valid, adding to server!\n", username);
 				ht_set(connected_users, username, "connected");
 				snprintf(response, sizeof(response),
-						"Username: %s is valid, adding you to the server!\n",
-						username);
+						"SERVER_USERNAME:VALID");
 
 			} else {
 				printf("Username: %s is NOT valid\n", username);
 				snprintf(response, sizeof(response),
-						"Username: %s is NOT valid because it already exists!\nPlease use a different one!\n",
+						"SERVER_USERNAME:INVALID",
 						username);
 			}
 			write(new_socket, response, strlen(response));
@@ -103,6 +109,7 @@ int main(int argc, char const *argv[]) {
 		}
 		//TODO
 		else if (strcmp(message_type, "USER_MESSAGE") == 0) {
+			char *message = getMessage(buffer);
 
 		}
 		//TODO
