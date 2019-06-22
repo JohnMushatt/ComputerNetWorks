@@ -14,5 +14,11 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <string.h>
+#include "hashmap.h"
 #define PORT 8080
+#define MAX_USERS 20
+
+
+
+char *getMessageType(const char *buffer);
 #endif /* SERVER_SERVER_H_ */
