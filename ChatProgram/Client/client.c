@@ -34,6 +34,24 @@ char* connectionMessage(char *username) {
 	return newString;
 
 }
+char* getMessageType(const char *buffer) {
+	char *type;
+	char *c = strchr(buffer, ':');
+	int index = (int) (c - buffer);
+	type = malloc(sizeof(char) * (index));
+	strncat(type, buffer, index);
+	return type;
+}
+
+char* getMessage(const char *buffer) {
+	char *message;
+	char *c = strchr(buffer, ':');
+	int index = (int) (c - buffer);
+	message = malloc(sizeof(char) * (index));
+	//strncat(name, buffer, index);
+	strcat(message, (strchr(buffer, ':') + 1));
+	return message;
+}
 int main(int argc, char const *argv[]) {
 	int sock = 0;
 	long valread;
@@ -64,17 +82,50 @@ int main(int argc, char const *argv[]) {
 		char *username = malloc(sizeof(char) * 20);
 		fgets(username, 20, stdin);
 		username = fixInput(username);
-		while (validUsername(username) == EXIT_FAILURE) {
-			printf("%s is not a valid username.\n", username);
-			printf("Please enter a valid username (Limited to 20 characters:");
-			fgets(username, 20, stdin);
+		int validName = -1;
+		//Validate name
+		while (validName != 0) {
+			//If the name is under 20 characters
+			if (validUsername(username) == 0) {
+
+				//Build message
+				char *client_message = connectionMessage(username);
+				//Send it to server for validation
+				send(sock, client_message, strlen(client_message), 0);
+				//Get server resposne
+				valread = read(sock, buffer, 1024);
+				//Get message type
+				char *message_type = getMessageType(buffer);
+
+				//If the server has sent a username related event
+				if (strcmp(message_type, "SERVER_USERNAME") == 0) {
+					char *message = getMessage(buffer);
+
+					//If the username is valid
+					if (strcmp(message, "VALID") == 0) {
+						validName = 0;
+					} else  if(strcmp(message,"INVALID")==0){
+						printf("%s is not a valid username.\n", username);
+						printf(
+								"Please enter a valid username (Limited to 20 characters):");
+						fgets(username, 20, stdin);
+						username = fixInput(username);
+
+					}
+				}
+
+				else {
+					printf("%s is not a valid username.\n", username);
+					printf(
+							"Please enter a valid username (Limited to 20 characters):");
+					fgets(username, 20, stdin);
+					username = fixInput(username);
+
+				}
+			}
 		}
-		printf("Your username: %s!\n", username);
-		char *message = connectionMessage(username);
-		send(sock, message, strlen(message), 0);
-		printf("Attempting to log in!\n");
-		valread = read(sock, buffer, 1024);
-		printf("Server Response:\n%s\n", buffer);
+		printf("Succesfully logged into the chat server!\nYour username: %s!\n", username);
+
 	}
 
 	return 0;
