@@ -34,6 +34,17 @@ char* connectionMessage(char *username) {
 	return newString;
 
 }
+char* disconnectionMessage(char *username) {
+	char *newString;
+	char *message_type = "USER_DISCONNECT:";
+	int len = strlen(username) + strlen(message_type) + 1;
+	newString = malloc(sizeof(char) * (len));
+	strcat(newString, message_type);
+	strcat(newString, username);
+	*(newString + len) = '\0';
+	return newString;
+
+}
 char* getMessageType(const char *buffer) {
 	char *type;
 	char *c = strchr(buffer, ':');
@@ -104,7 +115,7 @@ int main(int argc, char const *argv[]) {
 					//If the username is valid
 					if (strcmp(message, "VALID") == 0) {
 						validName = 0;
-					} else  if(strcmp(message,"INVALID")==0){
+					} else if (strcmp(message, "INVALID") == 0) {
 						printf("%s is not a valid username.\n", username);
 						printf(
 								"Please enter a valid username (Limited to 20 characters):");
@@ -124,7 +135,28 @@ int main(int argc, char const *argv[]) {
 				}
 			}
 		}
-		printf("Succesfully logged into the chat server!\nYour username: %s!\n", username);
+		printf("Succesfully logged into the chat server!\nYour username: %s!\n",
+				username);
+		int connected = 0;
+		while (connected == 0) {
+			printf("Enter a message to send to other people in the chat: ");
+			char message[1024];
+			fgets(message, 1024, stdin);
+
+			//TODO Parse message to see if whispering, requesting to see members, disconnect, or kill server
+			if (strncmp(message, "disconnect", 10) == 0) {
+				printf("Disconnecting %s...\n",username);
+				char *disconnect_message = disconnectionMessage(username);
+				send(sock, disconnect_message, strlen(disconnect_message), 0);
+				valread = read(sock, buffer, 1024);
+				char *server_disconnect_resposne = getMessage(buffer);
+				if(strcmp(server_disconnect_resposne,"SUCCESS")==0) {
+					connected=-1;
+					printf("%s Successfully Disconnected!\n",username);
+				}
+
+			}
+		}
 
 	}
 
