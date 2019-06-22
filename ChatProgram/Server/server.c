@@ -23,12 +23,12 @@ char* getUsername(const char *buffer) {
 	int index = (int) (c - buffer);
 	name = malloc(sizeof(char) * (index));
 	//strncat(name, buffer, index);
-	strcat(name,(strchr(buffer,':')+1));
+	strcat(name, (strchr(buffer, ':') + 1));
 	return name;
 }
 int main(int argc, char const *argv[]) {
 
-	struct table *connected_users = createTable(MAX_USERS);
+	hashtable_t *connected_users = ht_create(MAX_USERS);
 	int server_fd, new_socket;
 	long valread;
 	struct sockaddr_in address;
@@ -44,6 +44,18 @@ int main(int argc, char const *argv[]) {
 	address.sin_port = htons( PORT);
 
 	memset(address.sin_zero, '\0', sizeof address.sin_zero);
+
+	int reuse = 1;
+	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*) &reuse,
+			sizeof(reuse)) < 0) {
+		perror("setsockopt(SO_REUSEADDR) failed");
+	}
+#ifdef SO_REUSEPORT
+	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEPORT, (const char*) &reuse,
+			sizeof(reuse)) < 0) {
+		perror("setsockopt(SO_REUSEPORT) failed");
+	}
+#endif
 
 	if (bind(server_fd, (struct sockaddr*) &address, sizeof(address)) < 0) {
 		perror("In bind");
@@ -72,17 +84,21 @@ int main(int argc, char const *argv[]) {
 					"User %s has attempted to join, checking if the username is valid...\n",
 					username);
 			char response[1024];
-			if(lookup(connected_users, username)==-1) {
-				printf("Username: %s is valid, adding to server!\n",username);
-				insert(connected_users, username, 1);
-				snprintf(response,sizeof(response),"Username: %s is valid, adding you to the server!\n",username);
+			char *retrievedName = ht_get(connected_users, username);
+			if (retrievedName == NULL) {
+				printf("Username: %s is valid, adding to server!\n", username);
+				ht_set(connected_users, username, "connected");
+				snprintf(response, sizeof(response),
+						"Username: %s is valid, adding you to the server!\n",
+						username);
 
+			} else {
+				printf("Username: %s is NOT valid\n", username);
+				snprintf(response, sizeof(response),
+						"Username: %s is NOT valid because it already exists!\nPlease use a different one!\n",
+						username);
 			}
-			else {
-				printf("Username: %s is NOT valid\n",username);
-				snprintf(response,sizeof(response),"Username: %s is NOT valid because it already exists!\nPlease use a different one!\n",username);
-			}
-			write(new_socket,response,strlen(response));
+			write(new_socket, response, strlen(response));
 
 		}
 		//TODO

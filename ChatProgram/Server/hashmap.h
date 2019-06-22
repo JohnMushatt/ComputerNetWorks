@@ -12,19 +12,28 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct {
-    char *key;
-    int val;
-    struct node *next;
-} node;
+struct entry_s {
+	char *key;
+	char *value;
+	struct entry_s *next;
+};
 
-typedef struct {
-    int size;
-    struct node **list;
-} table;
+typedef struct entry_s entry_t;
 
-struct table *createTable(int size);
-int hashCode(struct table *t,char *key);
-void insert(struct table *t,char *key,int val);
-int lookup(struct table *t,char *key);
+struct hashtable_s {
+	int size;
+	struct entry_s **table;
+};
+
+typedef struct hashtable_s hashtable_t;
+
+hashtable_t* ht_create(int size);
+
+int ht_hash(hashtable_t *hashtable, char *key);
+
+entry_t* ht_newpair(char *key, char *value);
+
+void ht_set(hashtable_t *hashtable, char *key, char *value);
+
+char* ht_get(hashtable_t *hashtable, char *key);
 #endif /* HASHMAP_H_ */
