@@ -1,5 +1,5 @@
 TARGET = chatserver
-LIBS = -lm
+LIBS = -lm -pthread
 CC = gcc
 CFLAGS = -g -Wall
 
