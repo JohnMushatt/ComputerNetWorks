@@ -7,6 +7,7 @@
 
 // Client side C/C++ program to demonstrate Socket programming
 #define PORT 8080
+#define MAX_USERNAME_LENGTH 20
 #include "client.h"
 
 int validUsername(char *username) {
@@ -63,14 +64,44 @@ char* getMessage(const char *buffer) {
 	strcat(message, (strchr(buffer, ':') + 1));
 	return message;
 }
+char* getTarget(const char *buffer) {
+
+	char *target = malloc(sizeof(char) * (MAX_USERNAME_LENGTH));
+	char *temp = malloc(sizeof(char) * (MAX_USERNAME_LENGTH));	char *c = strchr(buffer, ' ');
+	int index = (int) (c - buffer + 1);
+	//name = malloc(sizeof(char) * (index));
+	//strncat(target, buffer, index);
+	strcpy(temp, buffer + index);
+	c = strchr(temp, ' ');
+	index = (int) (c - temp);
+	strncpy(target, temp, index);
+	return target;
+
+}
+char* getWhisperMessage(const char *buffer) {
+	char *message = malloc(sizeof(char) * (MAX_USERNAME_LENGTH));
+	char temp[1024];
+	char *c = strchr(buffer, ' ');
+	int index = (int) (c - buffer + 1);
+	//name = malloc(sizeof(char) * (index));
+	//strncat(target, buffer, index);
+	strcpy(temp, buffer + index);
+	c = strchr(temp, ' ');
+	index = (int) (c - temp+1);
+	strcpy(message, temp+index);
+	message =fixInput(message);
+	return message;
+
+}
 int main(int argc, char const *argv[]) {
+
 	int sock = 0;
 	long valread;
 	struct sockaddr_in serv_addr;
 	char buffer[1024] = { 0 };
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		printf("\n Socket creation error \n");
-		return -1;
+		return EXIT_FAILURE;
 	}
 
 	memset(&serv_addr, '0', sizeof(serv_addr));
@@ -81,12 +112,12 @@ int main(int argc, char const *argv[]) {
 	// Convert IPv4 and IPv6 addresses from text to binary form
 	if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
 		printf("\nInvalid address/ Address not supported \n");
-		return -1;
+		return EXIT_FAILURE;
 	}
 
 	if (connect(sock, (struct sockaddr*) &serv_addr, sizeof(serv_addr)) < 0) {
 		printf("\nConnection Failed \n");
-		return -1;
+		return EXIT_FAILURE;
 	} else {
 		printf(
 				"Please enter username to connect as (Limited to 20 characters):");
@@ -143,17 +174,52 @@ int main(int argc, char const *argv[]) {
 			char message[1024];
 			fgets(message, 1024, stdin);
 
-			//TODO Parse message to see if whispering, requesting to see members, disconnect, or kill server
 			if (strncmp(message, "disconnect", 10) == 0) {
-				printf("Disconnecting %s...\n",username);
+				printf("Disconnecting %s...\n", username);
 				char *disconnect_message = disconnectionMessage(username);
 				send(sock, disconnect_message, strlen(disconnect_message), 0);
 				valread = read(sock, buffer, 1024);
 				char *server_disconnect_resposne = getMessage(buffer);
-				if(strcmp(server_disconnect_resposne,"SUCCESS")==0) {
-					connected=-1;
-					printf("%s Successfully Disconnected!\n",username);
+				if (strcmp(server_disconnect_resposne, "SUCCESS") == 0) {
+					connected = -1;
+					printf("%s Successfully Disconnected!\n", username);
 				}
+
+			}
+			//Whisper
+			else if (strncmp(message, "whisper", 7) == 0) {
+				char *whisper_target = getTarget(message);
+				char *whisper_message = getWhisperMessage(message);
+				//char *whisper = whisperMessage(username,whisper_target,whisper_message);
+				int a = strlen("USER_WHISPER:");
+				int b =strlen(username);
+				int c = strlen(":");
+				int d = strlen(whisper_target);
+				int e= strlen(":");
+				int f = strlen(whisper_message);
+				int message_size =a + b + c  +d + e + f;
+
+				char whisper[message_size];
+				snprintf(whisper, sizeof(whisper), "USER_WHISPER:%s:%s:%s",
+						username, whisper_target, whisper_message);
+				send(sock, whisper, strlen(whisper), 0);
+				valread = read(sock, buffer, 1024);
+				char *message_response = getMessage(buffer);
+				if (strcmp(message_response, "SUCCESS") == 0) {
+					printf("Message delivered to %s!\n", whisper_target);
+				}
+
+			}
+			//Get the list of active clients
+			else if (strncmp(message, "list", 4) == 0) {
+				char *list_message = "USER_LIST";
+				send(sock, list_message, sizeof(list_message), 0);
+				valread = read(sock, buffer, 1024);
+				printf("Connected Clients:\n%s", buffer);
+
+			}
+			//Normal message
+			else {
 
 			}
 		}
