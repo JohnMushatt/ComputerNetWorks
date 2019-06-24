@@ -18,7 +18,10 @@ HEADERS = $(wildcard *.h)
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) -Wall $(LIBS) -o $@
-
+#Doxygen file
+docs:
+		doxygen
+#Clean up
 clean:
 	-rm -f *.o
 	-rm -f $(TARGET)
