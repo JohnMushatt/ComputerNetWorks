@@ -16,8 +16,19 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <arpa/inet.h>
-#endif /* CLIENT_CLIENT_H_ */
+#include <pthread.h>
 
+typedef struct {
+	int connfd;
+	int uid;
+	char username[20];
+} user_data;
+
+typedef struct {
+	int val;
+	char message[1024];
+} server_response;
 char *fixInput(char *input);
-
+server_response *receiveMessage(int fd, int size);
 int validUsername(char *username);
+#endif /* CLIENT_CLIENT_H_ */

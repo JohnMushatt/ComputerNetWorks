@@ -9,6 +9,9 @@
 #define PORT 8080
 #define MAX_USERNAME_LENGTH 20
 #include "client.h"
+static _Atomic(int) status = 0;
+static char overflow[1024];
+pthread_mutex_t input = PTHREAD_MUTEX_INITIALIZER;
 
 int validUsername(char *username) {
 	if (strlen(username) <= 20) {
@@ -67,7 +70,8 @@ char* getMessage(const char *buffer) {
 char* getTarget(const char *buffer) {
 
 	char *target = malloc(sizeof(char) * (MAX_USERNAME_LENGTH));
-	char *temp = malloc(sizeof(char) * (MAX_USERNAME_LENGTH));	char *c = strchr(buffer, ' ');
+	char *temp = malloc(sizeof(char) * (MAX_USERNAME_LENGTH));
+	char *c = strchr(buffer, ' ');
 	int index = (int) (c - buffer + 1);
 	//name = malloc(sizeof(char) * (index));
 	//strncat(target, buffer, index);
@@ -87,13 +91,116 @@ char* getWhisperMessage(const char *buffer) {
 	//strncat(target, buffer, index);
 	strcpy(temp, buffer + index);
 	c = strchr(temp, ' ');
-	index = (int) (c - temp+1);
-	strcpy(message, temp+index);
-	message =fixInput(message);
+	index = (int) (c - temp + 1);
+	strcpy(message, temp + index);
+	message = fixInput(message);
 	return message;
 
 }
+server_response *sendMessage(const char *buffer, int fd,int size) {
+	pthread_mutex_lock(&input);
+
+	int res =send(fd,buffer,size,0);
+	server_response *response = receiveMessage(fd, size);
+	pthread_mutex_unlock(&input);
+	return response;
+
+}
+server_response *receiveMessage(int fd, int size) {
+	pthread_mutex_lock(&input);
+	server_response *response = (server_response*) malloc(sizeof(server_response));
+	read(fd,response->message,size);
+	response->val = 0;
+	if(strncmp(response->message,"SERVER_MESSAGE",strlen("SERVER_MESSAGE"))) {
+		strcpy(overflow,response->message);
+		response->val = 1;
+	}
+	pthread_mutex_unlock(&input);
+	return response;
+
+}
+void* handleInput(void *data) {
+	char buffer[1024];
+	long valread;
+	user_data *user_info = (user_data*) data;
+	char *username = user_info->username;
+	int sock = user_info->connfd;
+	int connected = 0;
+	while (connected == 0) {
+		printf("Enter a message to send to other people in the chat: ");
+		char message[1024];
+		fgets(message, 1024, stdin);
+
+		if (strncmp(message, "disconnect", 10) == 0) {
+			printf("Disconnecting %s...\n", username);
+			char *disconnect_message = disconnectionMessage(username);
+			send(sock, disconnect_message, strlen(disconnect_message), 0);
+			valread = read(sock, buffer, 1024);
+			char *server_disconnect_resposne = getMessage(buffer);
+			if (strcmp(server_disconnect_resposne, "SUCCESS") == 0) {
+				connected=-1;
+				status = -1;
+				printf("%s Successfully Disconnected!\n", username);
+			}
+
+		}
+		//Whisper
+		else if (strncmp(message, "whisper", 7) == 0) {
+			char *whisper_target = getTarget(message);
+			char *whisper_message = getWhisperMessage(message);
+			//char *whisper = whisperMessage(username,whisper_target,whisper_message);
+			int a = strlen("USER_WHISPER:");
+			int b = strlen(username);
+			int c = strlen(":");
+			int d = strlen(whisper_target);
+			int e = strlen(":");
+			int f = strlen(whisper_message);
+			int message_size = a + b + c + d + e + f;
+
+			char whisper[message_size];
+			snprintf(whisper, sizeof(whisper), "USER_WHISPER:%s:%s:%s",
+					username, whisper_target, whisper_message);
+			send(sock, whisper, strlen(whisper), 0);
+			valread = read(sock, buffer, 1024);
+			char *message_response = getMessage(buffer);
+			if (strcmp(message_response, "SUCCESS") == 0) {
+				printf("Message delivered to %s!\n", whisper_target);
+			}
+
+		}
+		//Get the list of active clients
+		else if (strncmp(message, "list", 4) == 0) {
+			char *list_message = "USER_LIST";
+			send(sock, list_message, sizeof(list_message), 0);
+			valread = read(sock, buffer, 1024);
+			printf("Connected Clients:\n%s", buffer);
+
+		}
+		//Normal message
+		else {
+			char *format = "USER_MESSAGE:";
+			char *m = fixInput(message);
+			sprintf(buffer,"%s%s",format,m);
+			server_response *response =sendMessage(buffer, sock, 1024);
+			if(response->val==0) {
+
+			}
+			else if(response->val==1) {
+				printf("%s\n",response->message);
+			}
+
+		}
+	}
+	pthread_detach(pthread_self());
+	return NULL;
+}
+
+void* handleMessages(void *data) {
+	pthread_detach(pthread_self());
+	return NULL;
+}
 int main(int argc, char const *argv[]) {
+	pthread_t tid;
 
 	int sock = 0;
 	long valread;
@@ -168,63 +275,73 @@ int main(int argc, char const *argv[]) {
 		}
 		printf("Succesfully logged into the chat server!\nYour username: %s!\n",
 				username);
-		int connected = 0;
-		while (connected == 0) {
-			printf("Enter a message to send to other people in the chat: ");
-			char message[1024];
-			fgets(message, 1024, stdin);
+		user_data *user = (user_data*) malloc(sizeof(user_data));
+		user->connfd = sock;
+		strcpy(user->username, username);
+		pthread_create(&tid, NULL, &handleInput, (void*) user);
+		pthread_create(&tid, NULL, &handleMessages, (void*) user);
+		/*
+		 int connected = 0;
+		 while (connected == 0) {
+		 printf("Enter a message to send to other people in the chat: ");
+		 char message[1024];
+		 fgets(message, 1024, stdin);
 
-			if (strncmp(message, "disconnect", 10) == 0) {
-				printf("Disconnecting %s...\n", username);
-				char *disconnect_message = disconnectionMessage(username);
-				send(sock, disconnect_message, strlen(disconnect_message), 0);
-				valread = read(sock, buffer, 1024);
-				char *server_disconnect_resposne = getMessage(buffer);
-				if (strcmp(server_disconnect_resposne, "SUCCESS") == 0) {
-					connected = -1;
-					printf("%s Successfully Disconnected!\n", username);
-				}
+		 if (strncmp(message, "disconnect", 10) == 0) {
+		 printf("Disconnecting %s...\n", username);
+		 char *disconnect_message = disconnectionMessage(username);
+		 send(sock, disconnect_message, strlen(disconnect_message), 0);
+		 valread = read(sock, buffer, 1024);
+		 char *server_disconnect_resposne = getMessage(buffer);
+		 if (strcmp(server_disconnect_resposne, "SUCCESS") == 0) {
+		 connected = -1;
+		 printf("%s Successfully Disconnected!\n", username);
+		 }
 
-			}
-			//Whisper
-			else if (strncmp(message, "whisper", 7) == 0) {
-				char *whisper_target = getTarget(message);
-				char *whisper_message = getWhisperMessage(message);
-				//char *whisper = whisperMessage(username,whisper_target,whisper_message);
-				int a = strlen("USER_WHISPER:");
-				int b =strlen(username);
-				int c = strlen(":");
-				int d = strlen(whisper_target);
-				int e= strlen(":");
-				int f = strlen(whisper_message);
-				int message_size =a + b + c  +d + e + f;
+		 }
+		 //Whisper
+		 else if (strncmp(message, "whisper", 7) == 0) {
+		 char *whisper_target = getTarget(message);
+		 char *whisper_message = getWhisperMessage(message);
+		 //char *whisper = whisperMessage(username,whisper_target,whisper_message);
+		 int a = strlen("USER_WHISPER:");
+		 int b = strlen(username);
+		 int c = strlen(":");
+		 int d = strlen(whisper_target);
+		 int e = strlen(":");
+		 int f = strlen(whisper_message);
+		 int message_size = a + b + c + d + e + f;
 
-				char whisper[message_size];
-				snprintf(whisper, sizeof(whisper), "USER_WHISPER:%s:%s:%s",
-						username, whisper_target, whisper_message);
-				send(sock, whisper, strlen(whisper), 0);
-				valread = read(sock, buffer, 1024);
-				char *message_response = getMessage(buffer);
-				if (strcmp(message_response, "SUCCESS") == 0) {
-					printf("Message delivered to %s!\n", whisper_target);
-				}
+		 char whisper[message_size];
+		 snprintf(whisper, sizeof(whisper), "USER_WHISPER:%s:%s:%s",
+		 username, whisper_target, whisper_message);
+		 send(sock, whisper, strlen(whisper), 0);
+		 valread = read(sock, buffer, 1024);
+		 char *message_response = getMessage(buffer);
+		 if (strcmp(message_response, "SUCCESS") == 0) {
+		 printf("Message delivered to %s!\n", whisper_target);
+		 }
 
-			}
-			//Get the list of active clients
-			else if (strncmp(message, "list", 4) == 0) {
-				char *list_message = "USER_LIST";
-				send(sock, list_message, sizeof(list_message), 0);
-				valread = read(sock, buffer, 1024);
-				printf("Connected Clients:\n%s", buffer);
+		 }
+		 //Get the list of active clients
+		 else if (strncmp(message, "list", 4) == 0) {
+		 char *list_message = "USER_LIST";
+		 send(sock, list_message, sizeof(list_message), 0);
+		 valread = read(sock, buffer, 1024);
+		 printf("Connected Clients:\n%s", buffer);
 
-			}
-			//Normal message
-			else {
+		 }
+		 //Normal message
+		 else {
 
-			}
+		 }
+		 }
+		 */
+		while(status==0) {
+
 		}
+		return 0;
 
 	}
 
-	return 0;
 }
