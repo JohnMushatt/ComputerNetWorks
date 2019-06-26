@@ -20,8 +20,6 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdatomic.h>
-
-#include "hashmap.h"
 #define PORT 8080
 #define MAX_USERS 20
 #define MAX_USERNAME_LENGTH 20

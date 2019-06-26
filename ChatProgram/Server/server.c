@@ -10,8 +10,7 @@
 client_instance *connected_users[MAX_USERS];
 pthread_mutex_t client_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t topic_mutex = PTHREAD_MUTEX_INITIALIZER;
-static _Atomic(int)
-connected_clients = 0;
+static _Atomic(int) connected_clients = 0;
 
 int id = 0;
 int status = 1;
@@ -252,7 +251,7 @@ void* handleClients(void *arg) {
 		//If user is sending a message
 		else if (strcmp(message_type, "USER_MESSAGE") == 0) {
 			char *message = getMessage(buffer);
-			message = getMessage(message);
+			//message = getMessage(message);
 			messageConnectedClients(message);
 
 		} else if (strcmp(message_type, "USER_WHISPER") == 0) {
