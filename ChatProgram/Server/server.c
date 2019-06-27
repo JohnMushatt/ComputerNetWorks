@@ -9,12 +9,14 @@
 #include "server.h"
 client_instance *connected_users[MAX_USERS];
 pthread_mutex_t client_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t topic_mutex = PTHREAD_MUTEX_INITIALIZER;
-static _Atomic(int) connected_clients = 0;
+static _Atomic(int)
+connected_clients = 0;
 
 int id = 0;
 int status = 1;
-
+/**
+ * Get the message type
+ */
 char* getMessageType(const char *buffer) {
 	pthread_mutex_lock(&client_mutex);
 	char *type;
@@ -26,6 +28,9 @@ char* getMessageType(const char *buffer) {
 
 	return type;
 }
+/**
+ * Get the username
+ */
 char* getUsername(const char *buffer) {
 	pthread_mutex_lock(&client_mutex);
 
@@ -39,6 +44,9 @@ char* getUsername(const char *buffer) {
 
 	return name;
 }
+/**
+ * Get the message from the incoming buffer
+ */
 char* getMessage(const char *buffer) {
 	pthread_mutex_lock(&client_mutex);
 
@@ -52,7 +60,9 @@ char* getMessage(const char *buffer) {
 
 	return message;
 }
-
+/**
+ * Lock mutex and get the list of active clients
+ */
 void displayClients(int id) {
 	client_instance *client = getClient(id);
 
@@ -74,7 +84,7 @@ void displayClients(int id) {
 
 }
 /**
- *
+ *Validate name against connected clients
  */
 int checkName(const char *buffer) {
 	pthread_mutex_lock(&client_mutex);
@@ -91,6 +101,9 @@ int checkName(const char *buffer) {
 
 	return EXIT_SUCCESS;
 }
+/**
+ * Add client to connected list if possible
+ */
 int connectClient(client_instance *client) {
 	pthread_mutex_lock(&client_mutex);
 	for (int i = 0; i < MAX_USERS; i++) {
@@ -104,6 +117,9 @@ int connectClient(client_instance *client) {
 	pthread_mutex_unlock(&client_mutex);
 	return 0;
 }
+/**
+ * Disconnect user from connected clients
+ */
 int disconnectClient(client_instance *client) {
 	pthread_mutex_lock(&client_mutex);
 	for (int i = 0; i < MAX_USERS; i++) {
@@ -118,7 +134,9 @@ int disconnectClient(client_instance *client) {
 	pthread_mutex_unlock(&client_mutex);
 	return 0;
 }
-
+/**
+ * Find the whisper target from the buffer
+ */
 char* getWhisperTarget(const char *buffer) {
 	pthread_mutex_lock(&client_mutex);
 
@@ -129,7 +147,7 @@ char* getWhisperTarget(const char *buffer) {
 
 	strcpy(temp, buffer + index);
 	c = strchr(temp, ':');
-	index = (int) (c - temp+1);
+	index = (int) (c - temp + 1);
 	strcpy(temp, temp + index);
 	c = strchr(temp, ':');
 	index = (int) (c - temp);
@@ -139,6 +157,9 @@ char* getWhisperTarget(const char *buffer) {
 	return target;
 
 }
+/**
+ * Get the whisper message
+ */
 char* getWhisperMessage(const char *buffer) {
 	pthread_mutex_lock(&client_mutex);
 
@@ -162,24 +183,28 @@ char* getWhisperMessage(const char *buffer) {
 
 }
 /**
- *
+ *Send whisper to correct user if they exist
  */
 int whisper(const char *buffer, int id) {
 	pthread_mutex_lock(&client_mutex);
 	for (int i = 0; i < MAX_USERS; i++) {
-		if (connected_users[i]->uid == id) {
-			int clientFD = connected_users[i]->connfd;
+		if (connected_users[i] != NULL) {
+			if (connected_users[i]->uid == id) {
+				int clientFD = connected_users[i]->connfd;
 
-			write(clientFD, buffer, strlen(buffer));
-			pthread_mutex_unlock(&client_mutex);
-			return 1;
+				write(clientFD, buffer, strlen(buffer));
+				pthread_mutex_unlock(&client_mutex);
+				return 1;
+			}
 		}
 	}
 	pthread_mutex_unlock(&client_mutex);
 	return 0;
 
 }
-
+/**
+ * message all connected clients from buffer
+ */
 void messageConnectedClients(const char *buffer) {
 	pthread_mutex_lock(&client_mutex);
 	for (int i = 0; i < MAX_USERS; i++) {
@@ -206,20 +231,50 @@ client_instance* getClient(int id) {
 	pthread_mutex_unlock(&client_mutex);
 	return NULL;
 }
+/**
+ * Get the client data based on their username
+ */
 client_instance* getClientByName(const char *buffer) {
 	pthread_mutex_lock(&client_mutex);
 	for (int i = 0; i < MAX_USERS; i++) {
-		if (strcmp(buffer, connected_users[i]->username) == 0) {
-			pthread_mutex_unlock(&client_mutex);
+		if (connected_users[i] != NULL) {
 
-			return connected_users[i];
+			if (strcmp(buffer, connected_users[i]->username) == 0) {
+				pthread_mutex_unlock(&client_mutex);
+
+				return connected_users[i];
+			}
 		}
 	}
 	pthread_mutex_unlock(&client_mutex);
 	return NULL;
 }
-//*
+/**
+ * Get list of connected clients
+ */
+char* getConnectedClients() {
+	pthread_mutex_lock(&client_mutex);
 
+	char *list = malloc(
+			sizeof(char)
+					* (strlen("SERVER_LIST:")
+							+ MAX_USERS * (MAX_USERNAME_LENGTH + 2)));
+	strcat(list, "SERVER_LIST:");
+	//int index =0;
+	for (int i = 0; i < MAX_USERS; i++) {
+		if (connected_users[i] != NULL) {
+			char *message = malloc(sizeof(char) * (MAX_USERNAME_LENGTH + 2));
+			sprintf(message, "%s\n", connected_users[i]->username);
+			strcat(list, message);
+		}
+	}
+	pthread_mutex_unlock(&client_mutex);
+	return list;
+}
+/**
+ * Thread function to handle each client connected, server spawns new thread each time
+ * a new client joins the server
+ */
 void* handleClients(void *arg) {
 
 	char buffer[30000] = { 0 };
@@ -228,25 +283,29 @@ void* handleClients(void *arg) {
 	client_instance *current_client = (client_instance*) arg;
 
 	long valread = 0;
+	//If new data comes in
 	while ((valread = read(current_client->connfd, buffer, sizeof(buffer))) > 0) {
-		fprintf(stdout,buffer);
-		fprintf(stdout,"\n");
+		fprintf(stdout, buffer);
+		fprintf(stdout, "\n");
+		//Get message type
 		char *message_type = getMessageType(buffer);
+		//User connection
 		if (strcmp(message_type, "USER_CONNECT") == 0) {
 			char *username = getUsername(buffer);
 			int result = checkName(username);
 			if (result == EXIT_SUCCESS) {
 				strcpy(current_client->username, username);
-				printf("%s has joined the server!\n",
-						current_client->username);
+				printf("%s has joined the server!\n", current_client->username);
 				snprintf(response, sizeof(response), "SERVER_USERNAME:VALID");
 				write(current_client->connfd, response, sizeof(response));
 				char message[1024];
-				sprintf(message,"SERVER_CONNECT:%s",current_client->username);
+				sprintf(message, "SERVER_CONNECT:%s", current_client->username);
 				//sprintf(response,message);
 				messageConnectedClients(message);
 
-			} else {
+			}
+			//Invalid username
+			else {
 				printf(
 						"Username: %s has already been taken, alerting client to provide new name!\n",
 						username);
@@ -258,11 +317,14 @@ void* handleClients(void *arg) {
 		else if (strcmp(message_type, "USER_MESSAGE") == 0) {
 			char *message = getMessage(buffer);
 
-			sprintf(response,"SERVER_MESSAGE:%s:%s",current_client->username,message);
+			sprintf(response, "SERVER_MESSAGE:%s:%s", current_client->username,
+					message);
 			//message = getMessage(message);
 			messageConnectedClients(response);
 
-		} else if (strcmp(message_type, "USER_WHISPER") == 0) {
+		}
+		//User whisper
+		else if (strcmp(message_type, "USER_WHISPER") == 0) {
 
 			char *source = current_client->username;
 			char *target = getWhisperTarget(buffer);
@@ -270,21 +332,44 @@ void* handleClients(void *arg) {
 			char message[1024];
 			sprintf(message, "USER_WHISPER:%s:%s", source, whisper_message);
 			client_instance *target_client = getClientByName(target);
-			whisper(message, target_client->uid);
-
-		} else if (strcmp(message_type, "USER_DISCONNECT") == 0) {
-			disconnectClient(current_client);
-			printf("%s has been disconnected!\n", current_client->username);
-			snprintf(response, sizeof(response), "SERVER_DISCONNECT");
-			write(current_client->connfd, response, strlen(response));
-			close(current_client->connfd);
+			if (target_client == NULL) {
+				memset(message, 0, sizeof(message));
+				sprintf(message, "WHISPER_FAILURE:%s", target);
+				write(current_client->connfd, message, sizeof(message));
+			} else {
+				whisper(message, target_client->uid);
+			}
 
 		}
+		//User disconnect, inform all other users that they have disconnected
+		else if (strcmp(message_type, "USER_DISCONNECT") == 0) {
+			char *temp = malloc(sizeof(char) * 1024);
+			printf("%s has been disconnected!\n", current_client->username);
+			strcpy(temp, "SERVER_DISCONNECT:");
+			write(current_client->connfd, temp, strlen(temp));
+			close(current_client->connfd);
+			char disconnect_message[64];
+			sprintf(disconnect_message, "USER_DISCONNECT:%s",
+					current_client->username);
+
+			disconnectClient(current_client);
+			messageConnectedClients(disconnect_message);
+
+		}
+		//List the users
+		else if (strcmp(message_type, "USER_LIST") == 0) {
+			char *list = getConnectedClients();
+			whisper(list, current_client->uid);
+		}
+		//reset buffer to prevent overlapping requests and SEGFAULTS
+		memset(buffer, 0, sizeof(buffer));
 	}
 	pthread_detach(pthread_self());
 	return NULL;
 }
-
+/**
+ * Boiler plate code for sockets/conection
+ */
 int main(int argc, char const *argv[]) {
 
 	//struct Node *chat_log = NULL;
@@ -328,22 +413,24 @@ int main(int argc, char const *argv[]) {
 		perror("In listen");
 		exit(EXIT_FAILURE);
 	}
-
+	//While server is online
 	while (status == 1) {
 		//printf("\n+++++++ Waiting for new connection ++++++++\n\n");
 		socklen_t client_size = sizeof(client_address);
 		char response[1024];
-
+		//If new client is connected
 		if ((new_socket = accept(server_fd, (struct sockaddr*) &client_address,
 				(socklen_t*) &client_size)) < 0) {
 			perror("In accept");
 			exit(EXIT_FAILURE);
 		}
+		//Make sure within set amount of MAX_USERS
 		if (connected_clients == MAX_USERS) {
 			snprintf(response, sizeof(response), "SERVER_FULL");
 			write(new_socket, response, strlen(response));
 			close(new_socket);
 		}
+		//Build client data and spawn a new thread
 		client_instance *client = (client_instance*) malloc(
 				sizeof(client_instance));
 		client->addr = client_address;
