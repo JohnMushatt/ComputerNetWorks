@@ -170,7 +170,7 @@ int whisper(const char *buffer, int id) {
 		if (connected_users[i]->uid == id) {
 			int clientFD = connected_users[i]->connfd;
 
-			write(clientFD, buffer, sizeof(buffer));
+			write(clientFD, buffer, strlen(buffer));
 			pthread_mutex_unlock(&client_mutex);
 			return 1;
 		}
@@ -185,7 +185,7 @@ void messageConnectedClients(const char *buffer) {
 	for (int i = 0; i < MAX_USERS; i++) {
 		if (connected_users[i] != NULL) {
 			int clientFD = connected_users[i]->connfd;
-			write(clientFD, buffer, sizeof(buffer));
+			write(clientFD, buffer, strlen(buffer));
 		}
 	}
 	pthread_mutex_unlock(&client_mutex);
@@ -229,16 +229,22 @@ void* handleClients(void *arg) {
 
 	long valread = 0;
 	while ((valread = read(current_client->connfd, buffer, sizeof(buffer))) > 0) {
-
+		fprintf(stdout,buffer);
+		fprintf(stdout,"\n");
 		char *message_type = getMessageType(buffer);
 		if (strcmp(message_type, "USER_CONNECT") == 0) {
 			char *username = getUsername(buffer);
-			if (checkName(username) == EXIT_SUCCESS) {
+			int result = checkName(username);
+			if (result == EXIT_SUCCESS) {
 				strcpy(current_client->username, username);
-				printf("User: %s, has joined the server!\n",
+				printf("%s has joined the server!\n",
 						current_client->username);
 				snprintf(response, sizeof(response), "SERVER_USERNAME:VALID");
 				write(current_client->connfd, response, sizeof(response));
+				char message[1024];
+				sprintf(message,"SERVER_CONNECT:%s",current_client->username);
+				//sprintf(response,message);
+				messageConnectedClients(message);
 
 			} else {
 				printf(
@@ -251,8 +257,10 @@ void* handleClients(void *arg) {
 		//If user is sending a message
 		else if (strcmp(message_type, "USER_MESSAGE") == 0) {
 			char *message = getMessage(buffer);
+
+			sprintf(response,"SERVER_MESSAGE:%s:%s",current_client->username,message);
 			//message = getMessage(message);
-			messageConnectedClients(message);
+			messageConnectedClients(response);
 
 		} else if (strcmp(message_type, "USER_WHISPER") == 0) {
 
@@ -260,15 +268,14 @@ void* handleClients(void *arg) {
 			char *target = getWhisperTarget(buffer);
 			char *whisper_message = getWhisperMessage(buffer);
 			char message[1024];
-			sprintf(message, "%s says: %s", source, whisper_message);
+			sprintf(message, "USER_WHISPER:%s:%s", source, whisper_message);
 			client_instance *target_client = getClientByName(target);
 			whisper(message, target_client->uid);
 
 		} else if (strcmp(message_type, "USER_DISCONNECT") == 0) {
-
-			char *username = getUsername(buffer);
-			printf("%s has been disconnected!\n", username);
-			snprintf(response, sizeof(response), "SERVER_DISCONNECT:SUCCESS");
+			disconnectClient(current_client);
+			printf("%s has been disconnected!\n", current_client->username);
+			snprintf(response, sizeof(response), "SERVER_DISCONNECT");
 			write(current_client->connfd, response, strlen(response));
 			close(current_client->connfd);
 
@@ -333,7 +340,7 @@ int main(int argc, char const *argv[]) {
 			exit(EXIT_FAILURE);
 		}
 		if (connected_clients == MAX_USERS) {
-			snprintf(response, sizeof(response), "SERVER_CONNECT:FAILURE");
+			snprintf(response, sizeof(response), "SERVER_FULL");
 			write(new_socket, response, strlen(response));
 			close(new_socket);
 		}
